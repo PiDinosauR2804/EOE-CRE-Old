@@ -82,6 +82,7 @@ class EoETrainer(BaseTrainer):
 
             if self.task_idx == 0:
                 expert_model = f"./ckpt/{self.args.dataset_name}_{seed}_{self.args.augment_type}.pth"
+                # expert_model = f"/content/drive/MyDrive/FewRel_2021_all.pth"
                 model.load_expert_model(expert_model)
                 logger.info(f"load first task model from {expert_model}")
             else:
