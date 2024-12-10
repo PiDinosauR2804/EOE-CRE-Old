@@ -1,5 +1,6 @@
 import copy
 import json
+import re
 from collections import Counter
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -54,20 +55,27 @@ class EoE(nn.Module):
         self.label_description_ids = {}
         self.classifier = nn.ParameterList()
         self.triplet_loss_fn = nn.TripletMarginLoss(margin=1.0, p=2)
+        self.number_description = 3
 
-    def generate_description(self, label, tokenizer):
+    def generate_description(self, label, dataset_name, tokenizer):
+        if dataset_name.lower() == 'fewrel':
+            file_path = 'datasets/FewRel/pid2name.json'
+            with open(file_path, 'r', encoding='utf-8') as json_file:
+                data = json.load(json_file)
+        
+        label_name = data[label][0]
         model_name = "gpt2"  # Bạn có thể thay thế bằng một mô hình ngôn ngữ mã nguồn mở khác
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         model = AutoModelForCausalLM.from_pretrained(model_name)
         
         generator = pipeline("text-generation", model=model, tokenizer=tokenizer)
         
-        prompt = f"Describe the label '{label}' in a simple and detailed way: "
+        prompt = f"Describe the label '{label_name}' in a simple and detailed way: "
         descriptions = generator(prompt, max_length=50, num_return_sequences=3)
         
         # Lưu mô tả nhãn vào label_description
-        self.label_description_ids[label] = [self.preprocess_desciption(desc['generated_text']) for desc in descriptions]
-        self.label_description[label] = [desc['generated_text'] for desc in descriptions]
+        self.label_description_ids[label] = [self.preprocess_desciption(desc['generated_text'].replace(prompt, '').strip()) for desc in descriptions]
+        self.label_description[label] = [desc['generated_text'].replace(prompt, '').strip() for desc in descriptions]
 
     def generate_description_from_file(self, label, dataset_name, tokenizer):
         if dataset_name.lower() == 'fewrel':
@@ -81,7 +89,38 @@ class EoE(nn.Module):
         
         self.label_description_ids[label] = [self.preprocess_desciption(data[label][-1], tokenizer)]
         self.label_description[label] = [data[label][-1]]
+    
+    def take_generate_description_MrLinh_from_file(self, label, idx_label, dataset_name, tokenizer):
+        if dataset_name.lower() == 'fewrel':
+            file_path = 'datasets/FewRel/prompt_label/FewRel/relation_description_detail_10.txt'
+        if dataset_name.lower() == 'tacred':
+            file_path = 'datasets/TACRED/prompt_label/TACRED/relation_description_detail_10.txt'
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
+            data = file.readlines()
+                
+
+        # print(idx_label)
+        raw_descriptions = data[idx_label].split('\t')[2:2+self.number_description]
+        # for raw_description in raw_descriptions:
+        #     print('------------------')
+        #     print(raw_description)
+        #     print(len(raw_description.split(' ')))
         
+        # Lưu mô tả nhãn vào label_description        
+        self.label_description[label] = [self.preprocess_text(desc) for desc in raw_descriptions]
+        self.label_description_ids[label] = [self.preprocess_tokenize_desciption(desc, tokenizer) for desc in self.label_description[label]]
+    
+    def preprocess_text(self, text):
+        text = text.lower()
+        text = re.sub(r'[^a-zA-Z0-9.,?!()\s]', '', text)
+        text = text.strip()
+        
+        return text    
+        
+    def preprocess_tokenize_desciption(self, raw_text, tokenizer):
+        result = tokenizer(raw_text)
+        return result['input_ids']
+    
     def preprocess_desciption(self, raw_text, tokenizer):
         result = tokenizer(raw_text)
         return result['input_ids']
