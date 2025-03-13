@@ -244,8 +244,8 @@ class EoETrainer(BaseTrainer):
         logger.info("Hit Acc {}".format(hit_acc))
         
         if not oracle:
-            all_targets = [self.eoeid2waveid(x) for x in gold_indices]
-            all_preds   = [self.eoeid2waveid(x) for x in pred_indices]
+            all_targets = [self.eoeid2waveid[x] for x in golds]
+            all_preds   = [self.eoeid2waveid[x] for x in preds]
             all_labels = range((self.args.class_per_task * self.args.num_tasks))
             # Tính ma trận confusion matrix
             conf_matrix = confusion_matrix(all_targets, all_preds, labels=all_labels)
