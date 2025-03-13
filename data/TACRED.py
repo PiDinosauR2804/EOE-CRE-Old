@@ -88,10 +88,6 @@ class TACREDData(BaseData):
             cur_data = raw_data[label]
             random.shuffle(cur_data)
             
-            shuffle_index = list(range((self.args.class_per_task * self.args.num_tasks)))
-            random.shuffle(shuffle_index)
-            shuffle_index = np.argsort(shuffle_index)
-            # self.eoeid2waveid = {sorted_idx : shuffled_idx for sorted_idx, shuffled_idx in enumerate(shuffle_index)}
             self.eoeid2waveid = {0: 3, 1: 24, 2: 35, 3: 22, 4: 32, 5: 26, 6: 1, 7: 11, 8: 30, 9: 29, 10: 12, 11: 6, 12: 10, 13: 2, 14: 16, 15: 36, 16: 4, 17: 37, 18: 0, 19: 13, 20: 31, 21: 21, 22: 15, 23: 23, 24: 18, 25: 39, 26: 25, 27: 5, 28: 34, 29: 19, 30: 33, 31: 17, 32: 9, 33: 8, 34: 38, 35: 27, 36: 28, 37: 20, 38: 14, 39: 7}
             
             train_raw_data = {"sentence": [], "labels": []}

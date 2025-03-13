@@ -80,10 +80,6 @@ class FewRelData(BaseData):
             cur_data = raw_data[label]
             random.shuffle(cur_data)
             
-            shuffle_index = list((self.args.class_per_task * self.args.num_tasks))
-            random.shuffle(shuffle_index)
-            shuffle_index = np.argsort(shuffle_index)
-            # self.eoeid2waveid = {sorted_idx : shuffled_idx for sorted_idx, shuffled_idx in enumerate(shuffle_index)}
             self.eoeid2waveid = {0: 26, 1: 15, 2: 11, 3: 58, 4: 75, 5: 21, 6: 64, 7: 53, 8: 72, 9: 67, 10: 3, 11: 17, 12: 52, 13: 63, 14: 40, 15: 39, 16: 5, 17: 47, 18: 59, 19: 2, 20: 66, 21: 65, 22: 4, 23: 43, 24: 7, 25: 42, 26: 25, 27: 16, 28: 49, 29: 54, 30: 36, 31: 76, 32: 14, 33: 46, 34: 70, 35: 77, 36: 31, 37: 69, 38: 51, 39: 13, 40: 71, 41: 35, 42: 44, 43: 62, 44: 1, 45: 61, 46: 0, 47: 24, 48: 33, 49: 37, 50: 48, 51: 79, 52: 56, 53: 41, 54: 38, 55: 20, 56: 74, 57: 34, 58: 8, 59: 12, 60: 73, 61: 6, 62: 55, 63: 18, 64: 22, 65: 45, 66: 9, 67: 30, 68: 23, 69: 78, 70: 57, 71: 50, 72: 27, 73: 68, 74: 19, 75: 28, 76: 10, 77: 60, 78: 29, 79: 32}
             
             train_raw_data = {"sentence": [], "labels": []}
