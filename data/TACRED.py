@@ -15,6 +15,7 @@ class TACREDData(BaseData):
     def __init__(self, args):
         super().__init__(args)
         self.entity_markers = ["[E11]", "[E12]", "[E21]", "[E22]"]
+        self.eoeid2waveid = {}  
         # self.pretrain_re = self.args.pretrain_re
 
     def remove_entity_markers(self, input_ids):
@@ -86,6 +87,12 @@ class TACREDData(BaseData):
         for label in tqdm(raw_data.keys(), desc="Load TACRED data:"):
             cur_data = raw_data[label]
             random.shuffle(cur_data)
+            
+            shuffle_index = list(range(len(cur_data)))
+            random.shuffle(shuffle_index)
+            shuffle_index = np.argsort(shuffle_index)
+            self.eoeid2waveid = {sorted_idx : shuffled_idx for sorted_idx, shuffled_idx in enumerate(shuffle_index)}
+            
             train_raw_data = {"sentence": [], "labels": []}
             test_raw_data = {"sentence": [], "labels": []}
             train_count, test_count = 0, 0

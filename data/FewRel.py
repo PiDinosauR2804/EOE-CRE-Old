@@ -2,6 +2,7 @@ import copy
 import json
 import os
 import random
+import numpy as np
 
 from tqdm import tqdm
 
@@ -12,6 +13,7 @@ class FewRelData(BaseData):
     def __init__(self, args):
         super().__init__(args)
         self.entity_markers = ["[E11]", "[E12]", "[E21]", "[E22]"]
+        self.eoeid2waveid = {}  
 
     def remove_entity_markers(self, input_ids):
         ans = []
@@ -77,6 +79,12 @@ class FewRelData(BaseData):
         for label in tqdm(raw_data.keys(), desc="Load FewRel data"):
             cur_data = raw_data[label]
             random.shuffle(cur_data)
+            
+            shuffle_index = list(range(len(cur_data)))
+            random.shuffle(shuffle_index)
+            shuffle_index = np.argsort(shuffle_index)
+            self.eoeid2waveid = {sorted_idx : shuffled_idx for sorted_idx, shuffled_idx in enumerate(shuffle_index)}
+            
             train_raw_data = {"sentence": [], "labels": []}
             val_raw_data = {"sentence": [], "labels": []}
             test_raw_data = {"sentence": [], "labels": []}

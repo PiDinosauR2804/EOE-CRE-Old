@@ -15,6 +15,7 @@ class BaseData:
         self.label_list = self._read_labels()
         self.id2label, self.label2id = [], {}
         self.label2task_id = {}
+        self.eoeid2waveid = {}  
         self.train_data, self.val_data, self.test_data = None, None, None
 
     def _read_labels(self):

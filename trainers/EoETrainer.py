@@ -11,10 +11,13 @@ from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import set_seed
+import json
 
 from data import BaseDataset
 from trainers import BaseTrainer
 from utils import CustomCollatorWithPadding, relation_data_augmentation
+from sklearn.metrics import confusion_matrix
+
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +27,7 @@ class EoETrainer(BaseTrainer):
         super().__init__(args, **kwargs)
         self.task_idx = 0
         self.cur_seed = 0
+        self.eoeid2waveid = {}
 
     def run(self, data, model, tokenizer, label_order, seed=None):
         if seed is not None:
@@ -37,6 +41,10 @@ class EoETrainer(BaseTrainer):
         all_total_hit = []
         marker_ids = tuple([tokenizer.convert_tokens_to_ids(c) for c in self.args.additional_special_tokens])
         logger.info(f"marker ids: {marker_ids}")
+        
+        self.eoeid2waveid = data.eoeid2waveid  
+        print(self.eoeid2waveid) 
+        
         for task_idx in range(self.args.num_tasks):
             self.task_idx = task_idx
             cur_labels = [data.label_list[c] for c in label_order[task_idx]]
@@ -204,6 +212,7 @@ class EoETrainer(BaseTrainer):
         expert_class_preds = []
         hits = 0
         model.eval()
+        
         for step, inputs in enumerate(eval_dataloader):
 
             inputs = {k: v.to(self.args.device) for k, v in inputs.items()}
@@ -215,6 +224,7 @@ class EoETrainer(BaseTrainer):
             hit_gold = [label2task_id[c] for c in inputs["labels"].tolist()]
             pred_indices.extend(hit_pred)
             gold_indices.extend(hit_gold)
+                        
 
             predicts = outputs.preds.tolist()
             labels = inputs["labels"].tolist()
@@ -232,6 +242,30 @@ class EoETrainer(BaseTrainer):
         hit_acc = metrics.accuracy_score(gold_indices, pred_indices)
         logger.info("Acc {}".format(acc))
         logger.info("Hit Acc {}".format(hit_acc))
+        
+        if not oracle:
+            all_targets = [self.eoeid2waveid(x) for x in gold_indices]
+            all_preds   = [self.eoeid2waveid(x) for x in pred_indices]
+            all_labels = range((self.args.class_per_task * self.args.num_tasks))
+            # Tính ma trận confusion matrix
+            conf_matrix = confusion_matrix(all_targets, all_preds, labels=all_labels)
+            # In kết quả
+            print("Confusion Matrix:")
+            print(conf_matrix)
+            
+            conf_matrix_dict = conf_matrix.tolist()
+
+            # Đường dẫn thư mục cần tạo
+            folder_path = "CM"
+
+            # Tạo thư mục nếu chưa tồn tại
+            os.makedirs(folder_path, exist_ok=True)
+
+            
+            # Lưu vào file JSON
+            json_filename = f"CM/confusion_matrix_{self.task_idx}.json"
+            with open(json_filename, "w") as json_file:
+                json.dump(conf_matrix_dict, json_file, indent=4) 
 
         if not oracle:
             expert_task_preds = torch.cat(expert_task_preds, dim=0).tolist()
