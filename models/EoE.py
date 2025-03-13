@@ -1,6 +1,4 @@
 import copy
-import json
-import re
 from collections import Counter
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -11,7 +9,6 @@ import torch.nn.functional as F
 
 from models import PeftFeatureExtractor
 from utils import mahalanobis
-from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
 
 
 class EoE(nn.Module):
@@ -25,7 +22,7 @@ class EoE(nn.Module):
         self.max_expert = config.max_expert if config.max_expert != -1 else float("inf")
 
         self.feature_extractor = PeftFeatureExtractor(config)
-        
+
         self.num_old_labels = 0
         self.num_labels = 0
         self.num_tasks = -1
@@ -51,91 +48,8 @@ class EoE(nn.Module):
                 "cov_inv": torch.ones(self.query_size, self.query_size),
             }
         ]
-        self.label_description = {}
-        self.label_description_ids = {}
+
         self.classifier = nn.ParameterList()
-        self.triplet_loss_fn = nn.TripletMarginLoss(margin=1.0, p=2)
-        self.number_description = 3
-
-    def generate_description(self, label, dataset_name, tokenizer):
-        if dataset_name.lower() == 'fewrel':
-            file_path = 'datasets/FewRel/pid2name.json'
-            with open(file_path, 'r', encoding='utf-8') as json_file:
-                data = json.load(json_file)
-        
-        label_name = data[label][0]
-        model_name = "gpt2"  # Bạn có thể thay thế bằng một mô hình ngôn ngữ mã nguồn mở khác
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModelForCausalLM.from_pretrained(model_name)
-        
-        generator = pipeline("text-generation", model=model, tokenizer=tokenizer)
-        
-        prompt = f"Describe the label '{label_name}' in a simple and detailed way: "
-        descriptions = generator(prompt, max_length=50, num_return_sequences=3)
-        
-        # Lưu mô tả nhãn vào label_description
-        self.label_description_ids[label] = [self.preprocess_desciption(desc['generated_text'].replace(prompt, '').strip()) for desc in descriptions]
-        self.label_description[label] = [desc['generated_text'].replace(prompt, '').strip() for desc in descriptions]
-
-    def generate_description_from_file(self, label, dataset_name, tokenizer):
-        if dataset_name.lower() == 'fewrel':
-            file_path = 'datasets/FewRel/pid2name.json'
-            with open(file_path, 'r', encoding='utf-8') as json_file:
-                data = json.load(json_file)
-                        
-        # Lưu mô tả nhãn vào label_description
-        # self.label_description_ids[label] = [self.preprocess_desciption(desc, tokenizer) for desc in data[label]]
-        # self.label_description[label] = [desc for desc in data[label]]
-        
-        self.label_description_ids[label] = [self.preprocess_desciption(data[label][-1], tokenizer)]
-        self.label_description[label] = [data[label][-1]]
-    
-    def take_generate_description_MrLinh_from_file(self, label, idx_label, dataset_name, tokenizer):
-        if dataset_name.lower() == 'fewrel':
-            file_path = 'datasets/FewRel/prompt_label/FewRel/relation_description_detail_10.txt'
-        if dataset_name.lower() == 'tacred':
-            file_path = 'datasets/TACRED/prompt_label/TACRED/relation_description_detail_10.txt'
-        with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
-            data = file.readlines()
-                
-
-        # print(idx_label)
-        raw_descriptions = data[idx_label].split('\t')[2:2+self.number_description]
-        # for raw_description in raw_descriptions:
-        #     print('------------------')
-        #     print(raw_description)
-        #     print(len(raw_description.split(' ')))
-        
-        # Lưu mô tả nhãn vào label_description        
-        self.label_description[label] = [self.preprocess_text(desc) for desc in raw_descriptions]
-        self.label_description_ids[label] = [self.preprocess_tokenize_desciption(desc, tokenizer) for desc in self.label_description[label]]
-    
-    def preprocess_text(self, text):
-        text = text.lower()
-        text = re.sub(r'[^a-zA-Z0-9.,?!()\s]', '', text)
-        text = text.strip()
-        
-        return text    
-        
-    def preprocess_tokenize_desciption(self, raw_text, tokenizer):
-        result = tokenizer(raw_text)
-        return result['input_ids']
-    
-    def preprocess_desciption(self, raw_text, tokenizer):
-        result = tokenizer(raw_text)
-        return result['input_ids']
-        
-    def get_description(self, labels):
-        pool = {}
-        for label in labels:
-            pool[label] = copy.deepcopy(self.label_description[label])
-        return pool
-    
-    def get_description_ids(self, labels):
-        pool = {}
-        for label in labels:
-            pool[label] = copy.deepcopy(self.label_description_ids[label])
-        return pool
 
     def load_expert_model(self, expert_model):
         ckpt = torch.load(expert_model)
@@ -226,32 +140,7 @@ class EoE(nn.Module):
 
         return indices, scores_over_tasks, class_indices_over_tasks
 
-    def info_nce_loss(self, anchor, positive, negative, temperature=0.07):
-        # anchor: [batch_size, dim]
-        # positive: [batch_size, dim]
-        # negatives: [batch_size, num_negatives, dim]
-
-        # Normalize embeddings
-        anchor = F.normalize(anchor, dim=1)
-        positive = F.normalize(positive, dim=1)
-        negative = F.normalize(negative, dim=1)
-
-        # Positive logits
-        pos_logits = torch.sum(anchor * positive, dim=1, keepdim=True) / temperature  # [batch_size, 1]
-
-        # Negative logits
-        neg_logits = torch.sum(anchor * negative, dim=1, keepdim=True) / temperature  # [batch_size, 1]
-
-        # Combine logits
-        logits = torch.cat([pos_logits, neg_logits], dim=1)  # [batch_size, 1 + num_negatives]
-
-        labels = torch.zeros(anchor.size(0), dtype=torch.long).to(anchor.device)
-
-        # Compute loss
-        loss = F.cross_entropy(logits, labels)
-        return loss
-
-    def forward(self, input_ids, attention_mask=None, positive_input_ids=None, negative_input_ids=None, labels=None, oracle=False, descriptions_ids=None, **kwargs):
+    def forward(self, input_ids, attention_mask=None, labels=None, oracle=False, **kwargs):
 
         batch_size, _ = input_ids.shape
         if attention_mask is None:
@@ -364,73 +253,22 @@ class EoE(nn.Module):
                 expert_task_preds=all_score_over_task,
                 expert_class_preds=all_score_over_class,
             )
-            
         # only for training
         hidden_states = self.feature_extractor(
             input_ids=input_ids,
             attention_mask=attention_mask,
             indices=indices,
-            attribute="anchor",
             **kwargs
         )
         logits = self.classifier[self.num_tasks](hidden_states)
 
         loss = None
-        triplet_loss = 0.0
         if self.training:
             offset_label = labels - self.num_old_labels
             loss = F.cross_entropy(logits, offset_label)
-            
-            anchor_hidden_states = hidden_states
-            
-            # print("First------------------")
-            # print(input_ids.size())
-            # print(positive_input_ids.size())
-            # print(negative_input_ids.size())
-            
-            if positive_input_ids is not None and negative_input_ids is not None:
-
-                positve_attention_mask = positive_input_ids != 0
-                negative_attention_mask = negative_input_ids != 0
-                
-                # print(f"negative_attention_mask size: {negative_attention_mask.size()}")
-                # print(f"positve_attention_mask size: {positve_attention_mask.size()}")
-                
-                positive_hidden_states = self.feature_extractor(
-                    input_ids=positive_input_ids,
-                    attention_mask=positve_attention_mask,
-                    indices=indices,
-                    attribute="positive",
-                    **kwargs
-                )
-                negative_hidden_states = self.feature_extractor(
-                    input_ids=negative_input_ids,
-                    attention_mask=negative_attention_mask,
-                    indices=indices,
-                    attribute="negative",
-                    **kwargs
-                )
-                # print("Second------------------")
-                # print(hidden_states.size())
-                # print(positive_hidden_states.size())
-                # print(negative_hidden_states.size())
-                
-                triplet_loss = self.triplet_loss_fn(anchor_hidden_states, positive_hidden_states, negative_hidden_states)
-                loss += triplet_loss
-            if descriptions_ids is not None:
-                description_hidden_states = self.feature_extractor(
-                    input_ids=descriptions_ids,
-                    attention_mask=(descriptions_ids != 0),
-                    indices=indices,
-                    extract_mode="cls",
-                    **kwargs
-                )
-                info_nce_loss_value = self.info_nce_loss(anchor_hidden_states, description_hidden_states, negative_hidden_states)
-                loss += info_nce_loss_value
 
         logits = logits[:, :self.class_per_task]
         preds = logits.max(dim=-1)[1] + self.class_per_task * indices
-                
         indices = indices.tolist() if isinstance(indices, torch.Tensor) else indices
         return ExpertOutput(
             loss=loss,

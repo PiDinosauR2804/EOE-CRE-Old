@@ -12,9 +12,9 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import set_seed
 
-from data import BaseDataset, BaseTripletDataset
+from data import BaseDataset
 from trainers import BaseTrainer
-from utils import CustomCollatorWithPadding, CustomFloatCollatorWithPadding, relation_data_augmentation, relation_data_augmentation_and_contrastive_learning
+from utils import CustomCollatorWithPadding, relation_data_augmentation
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,6 @@ class EoETrainer(BaseTrainer):
             set_seed(seed)
             self.cur_seed = seed
         default_data_collator = CustomCollatorWithPadding(tokenizer)
-        float_data_collator = CustomFloatCollatorWithPadding(tokenizer)
 
         seen_labels = []
         all_cur_acc = []
@@ -46,43 +45,18 @@ class EoETrainer(BaseTrainer):
 
             logger.info(f"***** Task-{task_idx + 1} *****")
             logger.info(f"Current classes: {' '.join(cur_labels)}")
-            for cur_label in cur_labels:
-                # model.generate_description_from_file(cur_label, self.args.dataset_name, tokenizer)
-                model.take_generate_description_MrLinh_from_file(cur_label, data.label2id[cur_label], self.args.dataset_name, tokenizer)
-            pool = model.get_description_ids(cur_labels)
-            
-            train_data = data.filter_and_contrastive_learning_and_add_desciption(cur_labels, pool) 
-            # train_data = data.filter(cur_labels, "train") 
-            
-            sample = train_data[0]
-            print("Anchor Sample:")
-            for key, value in sample.items():
-                print(f"  {key}: {value}") 
-            
-            num_train_labels = len(cur_labels)
+
+            train_data = data.filter(cur_labels, "train")
             train_dataset = BaseDataset(train_data)
-            
-            # for key, value in pool.items():
-            #     print(f"  {key}: {value}") 
-            
-            # aug_train_data, num_train_labels = relation_data_augmentation(
-            #         copy.deepcopy(train_data), len(seen_labels), copy.deepcopy(data.id2label), marker_ids, self.args.augment_type
-            #     )   
-            if self.args.contrastive_learning:
-                aug_train_data, num_train_labels = relation_data_augmentation_and_contrastive_learning(
-                    copy.deepcopy(train_data), len(seen_labels), copy.deepcopy(data.id2label), marker_ids, self.args.augment_type
-                )                
-            else:
-                aug_train_data, num_train_labels = relation_data_augmentation(
-                    copy.deepcopy(train_data), len(seen_labels), copy.deepcopy(data.id2label), marker_ids, self.args.augment_type
-                )                
+            num_train_labels = len(cur_labels)
+            aug_train_data, num_train_labels = relation_data_augmentation(
+                copy.deepcopy(train_data), len(seen_labels), copy.deepcopy(data.id2label), marker_ids, self.args.augment_type
+            )
             aug_train_dataset = BaseDataset(aug_train_data)
-            
             model.new_task(num_train_labels)
 
             if self.task_idx == 0:
-                # expert_model = f"./ckpt/{self.args.dataset_name}_{seed}_{self.args.augment_type}.pth"
-                expert_model = f"/content/drive/MyDrive/FewRel_2021_all.pth"
+                expert_model = f"./ckpt/{self.args.dataset_name}_{seed}_{self.args.augment_type}.pth"
                 model.load_expert_model(expert_model)
                 logger.info(f"load first task model from {expert_model}")
             else:
@@ -117,7 +91,7 @@ class EoETrainer(BaseTrainer):
                 eval_dataset=cur_test_dataset,
                 data_collator=default_data_collator,
                 seen_labels=seen_labels,
-                label2task_id=copy.deepcopy(data.label2task_id), 
+                label2task_id=copy.deepcopy(data.label2task_id),
                 oracle=True,
             )
 
@@ -149,7 +123,7 @@ class EoETrainer(BaseTrainer):
             "total_acc": all_total_acc,
             "total_hit": all_total_hit,
         }
-        
+
     def train(self, model, train_dataset, data_collator):
         train_dataloader = DataLoader(
             train_dataset,
@@ -281,7 +255,7 @@ class EoETrainer(BaseTrainer):
     def statistic(self, model, dataset, data_collator):
         for i in range(-1, self.task_idx + 1):
             mean, cov, task_mean, task_cov = self.get_mean_and_cov(model, dataset, data_collator, i)
-            model.new_statistic(mean, cov, task_mean, task_cov, i)    
+            model.new_statistic(mean, cov, task_mean, task_cov, i)
 
     @torch.no_grad()
     def get_mean_and_cov(self, model, dataset, data_collator, expert_id=0):

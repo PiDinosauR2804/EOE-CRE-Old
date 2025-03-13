@@ -21,15 +21,12 @@ class CustomCollatorWithPadding:
             else:
                 return batch_data
         max_length = max([len(c) for c in batch_data])
-        # print(max_length)
         ans = []
         for ins in batch_data:
-            # print(ins)
             ins = ins + [0] * (max_length - len(ins))
             ans.append(ins)
-        # print(len(ans))
         if self.return_tensors == "pt":
-            return torch.LongTensor(batch_data)
+            return torch.LongTensor(ans)
         else:
             return ans
 
@@ -40,7 +37,5 @@ class CustomCollatorWithPadding:
             for k in batch_keys:
                 batch[k].append(ins[k])
         for k in batch_keys:
-            print(k)
             batch[k] = self.pad_to_same_length(batch[k])
         return batch
-
